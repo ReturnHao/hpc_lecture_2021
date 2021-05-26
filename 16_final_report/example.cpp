@@ -1,8 +1,5 @@
 #include <mpi.h>
-#include <cstdio>
-#include <cmath>
-#include <vector>
-#include <chrono>
+#include <bits/stdc++.h>
 using namespace std;
 
 int main(int argc, char** argv) {

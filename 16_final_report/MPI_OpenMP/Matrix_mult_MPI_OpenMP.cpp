@@ -21,10 +21,10 @@ int main(int argc, char** argv) {
     vector<double> subC(N * N / size, 0);
     for (int i = 0; i < N; i++)
     {
-        for (int j=0; j<N; j++)
+        for (int j = 0; j < N; j++)
         {
-            A[N*i+j] = drand48();
-            B[N*i+j] = drand48();
+            A[N * i + j] = drand48();
+            B[N * i + j] = drand48();
         }
     }
     // Initialize Partition Index & Matrices and Parallel rank
