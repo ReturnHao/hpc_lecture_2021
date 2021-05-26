@@ -1,10 +1,19 @@
+//
+//  Matrix_mult_MPI_OpenMP.cpp
+//  Parallel Matrix Multiplication using Hybird on MPI and OpenMP
+//
+//  Author: Fang Hao
+//
+//  Compile with -fopenmp -std=c++11 flag
+//  mpirun -np 4 ./a.out
+//
 #include <mpi.h>
 #include <bits/stdc++.h>
 #include <omp.h>
 using namespace std;
 
-int main(int argc, char** argv) {
-
+int main(int argc, char** argv)
+{
     // Initialize Process Number & Id
     int size, rank;
     MPI_Init(&argc, &argv);
@@ -27,6 +36,7 @@ int main(int argc, char** argv) {
             B[N * i + j] = drand48();
         }
     }
+    
     // Initialize Partition Index & Matrices and Parallel rank
     int offset = N / size * rank;
     for (int i = 0; i < N / size; i++)
