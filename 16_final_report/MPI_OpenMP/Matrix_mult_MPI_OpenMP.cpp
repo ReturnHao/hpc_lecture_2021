@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
         }
     }
     // Initialize Partition Index & Matrices and Parallel rank
-    int offset = N/size*rank;
+    int offset = N / size * rank;
     for (int i = 0; i < N / size; i++)
         for (int j = 0; j < N; j++)
             subA[N * i + j] = A[N * (i + offset) + j];
@@ -46,28 +46,30 @@ int main(int argc, char** argv) {
         auto tic = chrono::steady_clock::now();
         
         offset = N / size * ((rank + irank) % size);
+        int i, j, k;
 # pragma omp parallel shared (subA, subB, subC, size, offset) private (i, j, k)
 {
 # pragma omp for
-        for (int i = 0; i < N / size; i++)
-            for (int j = 0; j < N / size; j++)
-                for (int k = 0; k < N; k++)
+        for (i = 0; i < N / size; i++)
+            for (j = 0; j < N / size; j++)
+                for (k = 0; k < N; k++)
                     subC[N * i + j + offset] += subA[N * i + k] * subB[N / size * k + j];
 }
+        
         // Record the time-stamp after sub calculation process end
         auto toc = chrono::steady_clock::now();
         comp_time += chrono::duration<double>(toc - tic).count();
         
         // Send & Receive Buffer
-        MPI_Send(&subB[0], N * N / size, MPI_FLOAT, send_to, 0, MPI_COMM_WORLD);
-        MPI_Recv(&subB[0], N * N / size, MPI_FLOAT, recv_from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Send(&subB[0], N * N / size, MPI_DOUBLE, send_to, 0, MPI_COMM_WORLD);
+        MPI_Recv(&subB[0], N * N / size, MPI_DOUBLE, recv_from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
         // Record the time-stamp after whole process end
         tic = chrono::steady_clock::now();
         comm_time += chrono::duration<double>(tic - toc).count();
     }
     // Allgather result data
-    MPI_Allgather(&subC[0], N * N / size, MPI_FLOAT, &C[0], N * N / size, MPI_FLOAT, MPI_COMM_WORLD);
+    MPI_Allgather(&subC[0], N * N / size, MPI_DOUBLE, &C[0], N * N / size, MPI_DOUBLE, MPI_COMM_WORLD);
   
     // Error check
     for (int i = 0; i < N; i++)
