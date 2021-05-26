@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     // Parallel Matrix Multiplication
     int i, j, k;
 
-# pragma omp parallel shared (A, B, C, N) private (i, j, k)
+# pragma omp parallel shared (A, B, C) private (i, j, k)
 {
 # pragma omp for
     for (i = 0; i < N; i++)
