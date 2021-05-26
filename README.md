@@ -1,5 +1,7 @@
 # hpc_lecture
 
+Author: 20M38179 FANG HAO
+
 |          | Topic                                | Sample code               |
 | -------- | ------------------------------------ | ------------------------- |
 | Class 1  | Introduction to parallel programming |                           |
