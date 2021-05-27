@@ -29,36 +29,38 @@ float result[N][N];
             //result[i][j] = buffer[0] + buffer[2] + buffer[4] + buffer[6];
         }
     }
-}*/
+}
+*/
 
 void chunked_mm()
 {
-    for(int i=0;i<N;i+=1){
-
-          for(int j=0;j<N;j+=4){
-
-            for(int k=0;k<N;k+=4){
-
-              __m128 result = _mm_load_ps(&result[i][j]);
-
-              __m128 a_line  = _mm_load_ps(matrix_a+ i * N + k]);
-
-              __m128 b_line0 = _mm_load_ps(matrix_b + k * N + j);
-
-              __m128 b_line1 = _mm_loadu_ps(matrix_b + k * N + j + 1);
-
-              __m128 b_line2 = _mm_loadu_ps(matrix_b + k * N + j + 2);
-
-              __m128 b_line3 = _mm_loadu_ps(matrix_b + k * N + j + 3);
-
-             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0x00), b_line0));
-             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0x55), b_line1));
-             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0xaa), b_line2));
-             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0xff), b_line3));
-             _mm_store_ps(&result[i][j],result);
+    __m256 va, vb, vc;
+    float columSections[N];
+    
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            for (int k = 0; k < N; k++)
+            {
+                columSections[k] = matrix_b[k * N + j];
             }
-          }
+            vc = _mm256_set1_pf(0.0);
+            for (int k = 0; k < N; k += 8) {
+                // load
+                va = _mm256_loadu_ps(matrix_a+(i*N)+k); // matrix_a[i][k]
+                vb = _mm256_loadu_ps(&columSections[k]); // matrix_b[j][k]
+
+                // fused multiply and add
+                vc = _mm256_add_ps(vc, _mm256_mul_pd(va, vb));
+            }
+            vc = _mm256_hadd_ps(vc, vc);
+            vc = _mm256_hadd_ps(vc, vc);
+            result[i][j] = _mm256_cvtss_f32(vc);
+            
+            _mm256_storeu_ps(buffer, vc);
+            result[i][j] = buffer[0] + buffer[1] + buffer[2] + buffer[3] + buffer[4] + buffer[5] + buffer[6] + buffer[7];
+            //result[i][j] = buffer[0] + buffer[2] + buffer[4] + buffer[6];
         }
+    }
 }
 
 int main(int argc, char **argv) {
