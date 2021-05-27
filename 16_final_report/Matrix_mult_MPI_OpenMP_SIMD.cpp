@@ -1,14 +1,15 @@
 //
 //  Matrix_mult_MPI_OpenMP_SIMD.cpp
-//  Parallel Matrix Multiplication using Hybird on MPI and OpenMP
+//  Parallel Matrix Multiplication using Hybird on MPI and OpenMP with SIMD
 //
 //  Author: Fang Hao
 //
-//  Compile with -fopenmp -std=c++11 flag
+//  Compile with:
+//  mpicxx Matrix_mult_MPI_OpenMP_SIMD.cpp -fopenmp -march=native -O3 -std=c++11
 //  mpirun -np 4 ./a.out
 //
-#include <bits/stdc++.h>
 #include <immintrin.h>
+#include <bits/stdc++.h>
 #include <mpi.h>
 #include <omp.h>
 using namespace std;
@@ -20,7 +21,7 @@ int main(int argc, char** argv)
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+    
     // Generate Matrix
     const int N = 256;
     vector<float> A(N * N);
@@ -47,15 +48,15 @@ int main(int argc, char** argv)
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N / size; j++)
             subB[N / size * i + j] = B[N * i + j + offset];
-    for (int i = 0; i < N * N; i++) subC[i] = 0;
     int recv_from = (rank + 1) % size;
     int send_to = (rank - 1 + size) % size;
 
-    // Initialize simd Block
-    __m128 va, vb, vc, vres;
-    float columSections[N];
+    // Initialize OpenMP
+    // int thread_count = omp_get_num_threads();
     
-    int n_chunks = 4;
+    // Initialize SIMD Blocking
+    float columnSect[N];
+    int n_chunks = N / 64;
     
     // Parallel Matrix Multiplication
     double comp_time = 0, comm_time = 0;
@@ -65,34 +66,43 @@ int main(int argc, char** argv)
         auto tic = chrono::steady_clock::now();
         
         offset = N / size * ((rank + irank) % size);
-
-#pragma omp parallel for
-        for (int chunk = 0; chunk < 4; chunk++)
+        int chunk, i, j, k;
+# pragma omp parallel shared (subA, subB, subC, size, offset) private (chunk, i, j, k, columSect)
+{        
+# pragma omp for
+        for (chunk = 0; chunk < n_chunks; chunk++)
         {
-            for (int i = chunk * (N / size / n_chunks); i < (chunk + 1) * (N / size); i++)
+            for (i = chunk * (N / size / n_chunks); i < (chunk + 1) * (N / size / n_chunks); i++)
             {
-                for (int j = 0; j < N / size; j++)
+                for (j = 0; j < N / size; j++)
                 {
-                    for (int k = 0; k < N; k++)
+                    // Acquire column data
+                    for (k = 0; k < N; k++)
                     {
-                        columSections[k] = subB[N / size * k + j];
+                        columnSect[k] = subB[N / size * k + j];
                     }
-                    vc = _mm_set_ps1(0.0f);
-                    for (int k = 0; k < N; k += 4) {
-                        // load
-                        va = _mm_load_ps(&subA[N * i + k]);
-                        vb = _mm_load_ps(&columSections[k]);
+                    
+                    __m128 vc = _mm_set_ps1(0.0f);
+                    for (k = 0; k < N; k += 4)
+                    {
+                        // Load row & column data
+                        __m128 va = _mm_load_ps(&subA[N * i + k]);
+                        __m128 vb = _mm_load_ps(&columnSect[k]);
                         
-                        vres = _mm_mul_ps(va, vb);
-                        // fused multiply and add
+                        // Multiply & add
+                        __m128 vres = _mm_mul_ps(va, vb);
                         vc = _mm_add_ps(vc, vres);
                     }
+                    // Reduce to a single float
                     vc = _mm_hadd_ps(vc, vc);
                     vc = _mm_hadd_ps(vc, vc);
+                    
+                    // Store result
                     subC[N * i + j + offset] = _mm_cvtss_f32(vc);
                 }
             }
         }
+}
         // Record the time-stamp after sub calculation process end
         auto toc = chrono::steady_clock::now();
         comp_time += chrono::duration<double>(toc - tic).count();
