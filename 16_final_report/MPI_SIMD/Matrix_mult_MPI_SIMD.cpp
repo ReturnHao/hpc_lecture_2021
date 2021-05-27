@@ -65,32 +65,28 @@ int main(int argc, char** argv)
         auto tic = chrono::steady_clock::now();
         
         offset = N / size * ((rank + irank) % size);
-
-#pragma omp parallel for
-        for (int chunk = 0; chunk < 4; chunk++)
+        
+        for (int i = 0; i < N / size; i++)
         {
-            for (int i = chunk * (N / size / n_chunks); i < (chunk + 1) * (N / size); i++)
+            for (int j = 0; j < N / size; j++)
             {
-                for (int j = 0; j < N / size; j++)
+                for (int k = 0; k < N; k++)
                 {
-                    for (int k = 0; k < N; k++)
-                    {
-                        columSections[k] = subB[N / size * k + j];
-                    }
-                    vc = _mm_set_ps1(0.0f);
-                    for (int k = 0; k < N; k += 4) {
-                        // load
-                        va = _mm_load_ps(&subA[N * i + k]);
-                        vb = _mm_load_ps(&columSections[k]);
-                        
-                        vres = _mm_mul_ps(va, vb);
-                        // fused multiply and add
-                        vc = _mm_add_ps(vc, vres);
-                    }
-                    vc = _mm_hadd_ps(vc, vc);
-                    vc = _mm_hadd_ps(vc, vc);
-                    subC[N * i + j + offset] = _mm_cvtss_f32(vc);
+                    columSections[k] = subB[N / size * k + j];
                 }
+                vc = _mm_set_ps1(0.0f);
+                for (int k = 0; k < N; k += 4) {
+                    // load
+                    va = _mm_load_ps(&subA[N * i + k]);
+                    vb = _mm_load_ps(&columSections[k]);
+                    
+                    vres = _mm_mul_ps(va, vb);
+                    // fused multiply and add
+                    vc = _mm_add_ps(vc, vres);
+                }
+                vc = _mm_hadd_ps(vc, vc);
+                vc = _mm_hadd_ps(vc, vc);
+                subC[N * i + j + offset] = _mm_cvtss_f32(vc);
             }
         }
         // Record the time-stamp after sub calculation process end
