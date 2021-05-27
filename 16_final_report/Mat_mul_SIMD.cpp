@@ -2,7 +2,7 @@
 #include <immintrin.h>
 #include <omp.h>
 
-#define N 512
+#define N 24
 
 float matrix_a[N*N];
 float matrix_b[N*N];
@@ -34,31 +34,33 @@ float result[N][N];
 
 void chunked_mm()
 {
-    __m256 va, vb, vc;
+    __m128 va, vb, vc, vres;
     float columSections[N];
     
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
+    size_t const simdSize = sizeof(__m128) / sizeof(float);
+    
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+        {
             for (int k = 0; k < N; k++)
             {
                 columSections[k] = matrix_b[k * N + j];
             }
-            vc = _mm256_set1_pf(0.0);
-            for (int k = 0; k < N; k += 8) {
+            vc = _mm_set_ps1(0.0f);
+            for (int k = 0; k < N; k += 4) {
                 // load
-                va = _mm256_loadu_ps(matrix_a+(i*N)+k); // matrix_a[i][k]
-                vb = _mm256_loadu_ps(&columSections[k]); // matrix_b[j][k]
-
+                va = _mm_load_ps(matrix_a+(i*N)+k); // matrix_a[i][k]
+                vb = _mm_load_ps(&columSections[k]); // matrix_b[j][k]
+                // vb = _mm_load_ps(matrix_b+ k * N + j);
+                
+                vres = _mm_mul_ps(va, vb);
                 // fused multiply and add
-                vc = _mm256_add_ps(vc, _mm256_mul_pd(va, vb));
+                vc = _mm_add_ps(vc, vres);
             }
-            vc = _mm256_hadd_ps(vc, vc);
-            vc = _mm256_hadd_ps(vc, vc);
-            result[i][j] = _mm256_cvtss_f32(vc);
-            
-            _mm256_storeu_ps(buffer, vc);
-            result[i][j] = buffer[0] + buffer[1] + buffer[2] + buffer[3] + buffer[4] + buffer[5] + buffer[6] + buffer[7];
-            //result[i][j] = buffer[0] + buffer[2] + buffer[4] + buffer[6];
+            vc = _mm_hadd_ps(vc, vc);
+            vc = _mm_hadd_ps(vc, vc);
+            result[i][j] = _mm_cvtss_f32(vc);
         }
     }
 }
@@ -90,7 +92,7 @@ int main(int argc, char **argv) {
     for (int i=0; i<N; i++)
         for (int j=0; j<N; j++)
           for (int k=0; k<N; k++)
-            result[i][j] -= matrix_a[N * i + k] * matrix_b[N * j + k];
+            result[i][j] -= matrix_a[N * i + k] * matrix_b[N * k + j];
     
     double err = 0;
       for (int i=0; i < N; i++)

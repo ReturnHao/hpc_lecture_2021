@@ -55,8 +55,10 @@ int main(int argc, char** argv)
     int send_to = (rank - 1 + size) % size;
 
     // Initialize simd Block
-    // __m256 AVec, BVec, CVec;
-    float Temp[8];
+    __m128 va, vb, vc, vres;
+    float columSections[N];
+    size_t const simdSize = sizeof(__m128) / sizeof(float);
+    
     int n_chunks = 4;
     
     // Parallel Matrix Multiplication
@@ -78,30 +80,30 @@ int main(int argc, char** argv)
                     subC[N * i + j + offset] += subA[N * i + k] * subB[N / size * k + j];
 }
         */
-        int chunk, i, j, k;
-# pragma omp parallel for
-        for (chunk = 0; chunk < 4; chunk++)
-            for (i = chunk * (N / size / n_chunks); i < (chunk + 1) * (N / size / n_chunks); i++)
+        
+        for (int i = 0; i < N / size; i++)
+        {
+            for (int j = 0; j < N / size; j++)
             {
-                for (j = 0; j < N / size; j++)
+                for (int k = 0; k < N; k++)
                 {
-                    for (k = 0; k < 8; k++) Temp[k] = 0.0f;
-                    __m256 CVec = _mm256_loadu_ps(Temp);
-                    for (k = 0; k < N; k += 8)
-                    {
-                        // load
-                        __m256 AVec = _mm256_loadu_ps(&subA[N * i + k]);
-                        __m256 BVec = _mm256_loadu_ps(&subB[N / size * k + j]);
-                        
-                        // fused multiply and add
-                        CVec = _mm256_fmadd_ps(AVec, BVec, CVec);
-                    }
-                    
-                    _mm256_storeu_ps(Temp, CVec);
-                    for (k = 0; k < 8; k++) subC[N * i + j + offset] += Temp[k];
+                    columSections[k] = matrix_b[N / size * k + j];
                 }
+                vc = _mm_set_ps1(0.0f);
+                for (int k = 0; k < N; k += 4) {
+                    // load
+                    va = _mm_load_ps(&subA[N * i + k]);
+                    vb = _mm_load_ps(&columSections[k]);
+                    
+                    vres = _mm_mul_ps(va, vb);
+                    // fused multiply and add
+                    vc = _mm_add_ps(vc, vres);
+                }
+                vc = _mm_hadd_ps(vc, vc);
+                vc = _mm_hadd_ps(vc, vc);
+                subC[N * i + j + offset] = _mm_cvtss_f32(vc);
             }
-            
+        }
         // Record the time-stamp after sub calculation process end
         auto toc = chrono::steady_clock::now();
         comp_time += chrono::duration<double>(toc - tic).count();
