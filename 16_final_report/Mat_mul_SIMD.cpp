@@ -33,19 +33,32 @@ float result[N][N];
 
 void chunked_mm()
 {
-    for (int i = 0; i < N; i += 8)
-    {
-        for (int j = 0; j < N; j ++)
-        {
-            __m256 c0 = {0, 0, 0, 0, 0, 0, 0, 0};
-            for (int k = 0; k < N; k++)
-            {
-                c0 = _mm256_add_ps(c0, _mm256_mul_ps(_mm256_load_ps(matrix_a+i+k*N), _mm256_broadcast_ss(matrix_b+k+j*N)));
+    for(int i=0;i<N;i+=1){
+
+          for(int j=0;j<N;j+=4){
+
+            for(int k=0;k<N;k+=4){
+
+              __m128 result = _mm_load_ps(&result[i][j]);
+
+              __m128 a_line  = _mm_load_ps(matrix_a+ i * N + k]);
+
+              __m128 b_line0 = _mm_load_ps(matrix_b + k * N + j);
+
+              __m128 b_line1 = _mm_loadu_ps(matrix_b + k * N + j + 1);
+
+              __m128 b_line2 = _mm_loadu_ps(matrix_b + k * N + j + 2);
+
+              __m128 b_line3 = _mm_loadu_ps(matrix_b + k * N + j + 3);
+
+             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0x00), b_line0));
+             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0x55), b_line1));
+             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0xaa), b_line2));
+             result = _mm_add_ps(result, _mm_mul_ps(_mm_shuffle_ps(a_line, a_line, 0xff), b_line3));
+             _mm_store_ps(&result[i][j],result);
             }
-            _mm256_store_ps(c+i+j*N, c0);
+          }
         }
-        result[i][j] = c[i+j*N];
-    }
 }
 
 int main(int argc, char **argv) {
@@ -75,14 +88,14 @@ int main(int argc, char **argv) {
     for (int i=0; i<N; i++)
         for (int j=0; j<N; j++)
           for (int k=0; k<N; k++)
-            result[i][j] -= matrix_a[N * i + k] * matrix_b[N * k + j];
+            result[i][j] -= matrix_a[N * i + k] * matrix_b[N * j + k];
     
     double err = 0;
       for (int i=0; i < N; i++)
         for (int j=0; j < N; j++)
           err += fabs(result[i][j]);
     
-    printf("error: %lf\n",err/N/N);
+    printf("error: %lf\n", err / N / N);
     
     return 0;
 }
