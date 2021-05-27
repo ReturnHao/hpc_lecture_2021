@@ -67,7 +67,7 @@ int main(int argc, char** argv)
         
         offset = N / size * ((rank + irank) % size);
         int chunk, i, j, k;
-# pragma omp parallel shared (subA, subB, subC, size, offset) private (chunk, i, j, k, columSect)
+# pragma omp parallel shared (subA, subB, subC, size, offset) private (chunk, i, j, k, columnSect)
 {        
 # pragma omp for
         for (chunk = 0; chunk < n_chunks; chunk++)
