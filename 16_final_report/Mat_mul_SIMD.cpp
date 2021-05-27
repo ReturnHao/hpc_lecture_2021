@@ -6,9 +6,10 @@
 
 float matrix_a[N*N];
 float matrix_b[N*N];
+float c[N*N];
 float result[N][N];
 
-void chunked_mm(int chunk, int n_chunks) {
+/*void chunked_mm(int chunk, int n_chunks) {
     __m256 va, vb, vc;
     for (int i = chunk*(N/n_chunks); i < (chunk+1)*(N/n_chunks); i++) {
         for (int j = 0; j < N; j++) {
@@ -28,6 +29,23 @@ void chunked_mm(int chunk, int n_chunks) {
             //result[i][j] = buffer[0] + buffer[2] + buffer[4] + buffer[6];
         }
     }
+}*/
+
+void chunked_mm()
+{
+    for (int i = 0; i < N; i += 8)
+    {
+        for (int j = 0; j < N; j ++)
+        {
+            __m256 c0 = {0, 0, 0, 0, 0, 0, 0, 0};
+            for (int k = 0; k < N; k++)
+            {
+                c0 = _mm256_add_ps(c0, _mm256_mul_ps(_mm256_load_ps(matrix_a+i+k*N), _mm256_broadcast_ss(matrix_b+k+j*N)));
+            }
+            _mm256_store_ps(c+i+j*N, c0);
+        }
+        result[i][j] = c[i+j*N];
+    }
 }
 
 int main(int argc, char **argv) {
@@ -46,10 +64,13 @@ int main(int argc, char **argv) {
         }
     }
 
+    /*
     #pragma omp parallel for
     for (int i = 0; i < 4; i++) {
         chunked_mm(i, 4);
     }
+    */
+    chunked_mm();
     
     for (int i=0; i<N; i++)
         for (int j=0; j<N; j++)
