@@ -36,8 +36,8 @@ int main(int argc, char **argv) {
     // matrix_b = malloc(N*N*sizeof(float));
 
     for (int i = 0; i < N*N; i++) {
-        *(matrix_a+i) = 0.1f;
-        *(matrix_b+i) = 0.2f;
+        *(matrix_a+i) = drand48();
+        *(matrix_b+i) = drand48();
     }
     // initialize result matrix
     for (int i = 0; i < N; i++) {
@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
     }
     
     for (int i=0; i<N; i++)
-        for (int k=0; k<N; k++)
-          for (int j=0; j<N; j++)
+        for (int j=0; j<N; j++)
+          for (int k=0; k<N; k++)
             result[i][j] -= matrix_a[N * i + k] * matrix_b[N * k + j];
     
     double err = 0;

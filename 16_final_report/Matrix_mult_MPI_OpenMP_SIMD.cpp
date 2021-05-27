@@ -86,15 +86,15 @@ int main(int argc, char** argv)
                 for (j = 0; j < N / size; j++)
                 {
                     for (k = 0; k < 8; k++) Temp[k] = 0.0f;
-                    CVec = _mm256_loadu_ps(Temp);
+                    __m256 CVec = _mm256_loadu_ps(Temp);
                     for (k = 0; k < N; k += 8)
                     {
                         // load
-                        __m256 AVec = _mm256_loadu_ps(subA + N * i + k);
-                        __m256 BVec = _mm256_loadu_ps(subB + N / size * j + k);
+                        __m256 AVec = _mm256_loadu_ps(&subA[N * i + k]);
+                        __m256 BVec = _mm256_loadu_ps(&subB[N / size * k + j]);
                         
                         // fused multiply and add
-                        __m256 CVec = _mm256_fmadd_ps(AVec, BVec, CVec);
+                        CVec = _mm256_fmadd_ps(AVec, BVec, CVec);
                     }
                     
                     _mm256_storeu_ps(Temp, CVec);
