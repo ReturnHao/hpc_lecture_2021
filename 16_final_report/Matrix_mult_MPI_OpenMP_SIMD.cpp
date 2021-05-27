@@ -26,9 +26,13 @@ int main(int argc, char** argv)
     vector<float> A(N * N);
     vector<float> B(N * N);
     vector<float> C(N * N, 0);
-    vector<float> subA(N * N / size);
-    vector<float> subB(N * N / size);
-    vector<float> subC(N * N / size, 0);
+    // vector<float> subA(N * N / size);
+    // vector<float> subB(N * N / size);
+    // vector<float> subC(N * N / size, 0);
+    float subA[N * N / size];
+    float subB[N * N / size];
+    float subC[N * N / size];
+    
     for (int i = 0; i < N; i++)
     {
         for (int j = 0; j < N; j++)
@@ -46,11 +50,12 @@ int main(int argc, char** argv)
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N / size; j++)
             subB[N / size * i + j] = B[N * i + j + offset];
+    for (int i = 0; i < N * N; i++) subC[i] = 0;
     int recv_from = (rank + 1) % size;
     int send_to = (rank - 1 + size) % size;
 
     // Initialize simd Block
-    __m256 AVec, BVec, CVec;
+    // __m256 AVec, BVec, CVec;
     float Temp[8];
     int n_chunks = 4;
     
@@ -81,19 +86,19 @@ int main(int argc, char** argv)
                 for (j = 0; j < N / size; j++)
                 {
                     for (k = 0; k < 8; k++) Temp[k] = 0.0f;
-                    CVec = _mm256_loadu_ps(buffer);
+                    CVec = _mm256_loadu_ps(Temp);
                     for (k = 0; k < N; k += 8)
                     {
                         // load
-                        AVec = _mm256_loadu_ps(subA[N * i + k]);
-                        BVec = _mm256_loadu_ps(subB[N / size * k + j]);
+                        __m256 AVec = _mm256_loadu_ps(subA + N * i + k);
+                        __m256 BVec = _mm256_loadu_ps(subB + N / size * j + k);
                         
                         // fused multiply and add
-                        CVec = _mm256_fmadd_ps(AVec, BVec, CVec);
+                        __m256 CVec = _mm256_fmadd_ps(AVec, BVec, CVec);
                     }
                     
-                    _mm256_storeu_ps(Temp, Cvec);
-                    for (k = 0; k < 8; k++) SubC[N * i + j + offset] += Temp[k];
+                    _mm256_storeu_ps(Temp, CVec);
+                    for (k = 0; k < 8; k++) subC[N * i + j + offset] += Temp[k];
                 }
             }
             
