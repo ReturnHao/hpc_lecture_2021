@@ -1,18 +1,28 @@
 //
-//  Matrix_mult_MPI_SIMD.cpp
-//  Parallel Matrix Multiplication using Hybird on MPI and SIMD
+//  Matrix_mult_MPI_Cuda.cu
+//  Parallel Matrix Multiplication using Hybird on MPI and Cuda
 //
 //  Author: Fang Hao
 //
 //  Compile with:
-//  mpicxx Matrix_mult_MPI_SIMD.cpp -march=native -O3 -std=c++11
-//  mpirun -np 4 ./a.out
+//  nvcc Matrix_mult_MPI_Cuda.cu -lmpi
 //
-#include <bits/stdc++.h>
-#include <immintrin.h>
 #include <mpi.h>
+#include <bits/stdc++.h>
 #include <omp.h>
 using namespace std;
+#define BLOCK_SIZE 16
+
+__global__ void GPU_matrix_mult(float *a, float *b, float *c, int n, int Offset)
+{
+    int i = blockIdx.y * BLOCK_SIZE + threadIdx.y;
+    int j = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+    if ((i < n) && (j < n))
+    {
+        for (int k = 0; k < n; k++)
+            c[n * i + j + Offset] += a[n * i + k] * b[n / size * k + j];
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -24,19 +34,21 @@ int main(int argc, char** argv)
 
     // Generate Matrix
     const int N = 256;
-    vector<float> A(N * N);
-    vector<float> B(N * N);
-    vector<float> C(N * N, 0);
-    vector<float> subA(N * N / size);
-    vector<float> subB(N * N / size);
-    vector<float> subC(N * N / size, 0);
-    vector<float> recv(N * N / size);
+    float *A, *B, *C, *subA, *subB, *subC, *recv;
+    cudaMallocManaged(&A, N * N * sizeof(float));
+    cudaMallocManaged(&B, N * N * sizeof(float));
+    cudaMallocManaged(&C, N * N * sizeof(float));
+    cudaMallocManaged(&subA, N * N / size * sizeof(float));
+    cudaMallocManaged(&subB, N * N / size * sizeof(float));
+    cudaMallocManaged(&subC, N * N / size * sizeof(float));
+    cudaMallocManaged(&recv, N * N / size * sizeof(float));
     for (int i = 0; i < N; i++)
     {
         for (int j = 0; j < N; j++)
         {
             A[N * i + j] = drand48();
             B[N * i + j] = drand48();
+            C[N * i + j] = 0.0f;
         }
     }
     
@@ -48,14 +60,15 @@ int main(int argc, char** argv)
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N / size; j++)
             subB[N / size * i + j] = B[N * i + j + offset];
+    for (int i = 0; i < N * N / size; i++) subC[i] = 0.0f;
     int recv_from = (rank + 1) % size;
     int send_to = (rank - 1 + size) % size;
-
-    // Initialize simd Block
-    __m128 va, vb, vc, vres;
-    float columnSect[N];
-    int n_chunks = 4;
     
+    // Initialize CUDA grid and block
+    unsigned int grid_n = ((N / size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    dim3 dimGrid(grid_n, grid_n);
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+
     // Parallel Matrix Multiplication
     double comp_time = 0, comm_time = 0;
     for (int irank = 0; irank < size; irank++)
@@ -64,35 +77,8 @@ int main(int argc, char** argv)
         auto tic = chrono::steady_clock::now();
         
         offset = N / size * ((rank + irank) % size);
-        for (int i = 0; i < N / size; i++)
-        {
-            for (int j = 0; j < N / size; j++)
-            {
-                // Acquire column data
-                for (int k = 0; k < N; k++)
-                {
-                    columnSect[k] = subB[N / size * k + j];
-                }
-                
-                __m128 vc = _mm_set_ps1(0.0f);
-                for (int k = 0; k < N; k += 4)
-                {
-                    // Load row & column data
-                    __m128 va = _mm_load_ps(&subA[N * i + k]);
-                    __m128 vb = _mm_load_ps(&columnSect[k]);
-                    
-                    // Multiply & add
-                    __m128 vres = _mm_mul_ps(va, vb);
-                    vc = _mm_add_ps(vc, vres);
-                }
-                // Reduce to a single float
-                vc = _mm_hadd_ps(vc, vc);
-                vc = _mm_hadd_ps(vc, vc);
-                
-                // Store result
-                subC[N * i + j + offset] = _mm_cvtss_f32(vc);
-            }
-        }
+        GPU_matrix_mult<<dimGrid, dimBlock>>(subA, subB, subC, N, offset);
+        cudaDeviceSynchronize();
         // Record the time-stamp after sub calculation process end
         auto toc = chrono::steady_clock::now();
         comp_time += chrono::duration<double>(toc - tic).count();

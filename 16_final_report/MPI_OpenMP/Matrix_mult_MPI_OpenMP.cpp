@@ -4,7 +4,8 @@
 //
 //  Author: Fang Hao
 //
-//  Compile with -fopenmp -std=c++11 flag
+//  Compile with:
+//  mpicxx Matrix_mult_MPI_OpenMP.cpp -fopenmp -std=c++11
 //  mpirun -np 4 ./a.out
 //
 #include <mpi.h>
@@ -22,12 +23,13 @@ int main(int argc, char** argv)
 
     // Generate Matrix
     const int N = 256;
-    vector<double> A(N * N);
-    vector<double> B(N * N);
-    vector<double> C(N * N, 0);
-    vector<double> subA(N * N / size);
-    vector<double> subB(N * N / size);
-    vector<double> subC(N * N / size, 0);
+    vector<float> A(N * N);
+    vector<float> B(N * N);
+    vector<float> C(N * N, 0);
+    vector<float> subA(N * N / size);
+    vector<float> subB(N * N / size);
+    vector<float> subC(N * N / size, 0);
+    vector<float> recv(N * N / size);
     for (int i = 0; i < N; i++)
     {
         for (int j = 0; j < N; j++)
@@ -71,15 +73,18 @@ int main(int argc, char** argv)
         comp_time += chrono::duration<double>(toc - tic).count();
         
         // Send & Receive Buffer
-        MPI_Send(&subB[0], N * N / size, MPI_DOUBLE, send_to, 0, MPI_COMM_WORLD);
-        MPI_Recv(&subB[0], N * N / size, MPI_DOUBLE, recv_from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Request request[2];
+        MPI_Isend(&subB[0], N * N / size, MPI_FLOAT, send_to, 0, MPI_COMM_WORLD, &request[0]);
+        MPI_Irecv(&recv[0], N * N / size, MPI_FLOAT, recv_from, 0, MPI_COMM_WORLD, &request[1]);
+        MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+        for (int i = 0; i < N * N / size; i++) subB[i] = recv[i];
         
         // Record the time-stamp after whole process end
         tic = chrono::steady_clock::now();
         comm_time += chrono::duration<double>(tic - toc).count();
     }
     // Allgather result data
-    MPI_Allgather(&subC[0], N * N / size, MPI_DOUBLE, &C[0], N * N / size, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Allgather(&subC[0], N * N / size, MPI_FLOAT, &C[0], N * N / size, MPI_FLOAT, MPI_COMM_WORLD);
   
     // Error check
     for (int i = 0; i < N; i++)
