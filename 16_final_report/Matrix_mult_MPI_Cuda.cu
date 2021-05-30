@@ -13,14 +13,14 @@
 using namespace std;
 #define BLOCK_SIZE 16
 
-__global__ void GPU_matrix_mult(float *a, float *b, float *c, int n, int Offset)
+__global__ void GPU_matrix_mult(float *a, float *b, float *c, int N, int size, int Offset)
 {
     int i = blockIdx.y * BLOCK_SIZE + threadIdx.y;
     int j = blockIdx.x * BLOCK_SIZE + threadIdx.x;
-    if ((i < n) && (j < n))
+    if ((i < N / size) && (j < N / size))
     {
-        for (int k = 0; k < n; k++)
-            c[n * i + j + Offset] += a[n * i + k] * b[n / size * k + j];
+        for (int k = 0; k < N; k++)
+            c[N * i + j + Offset] += a[N * i + k] * b[N / size * k + j];
     }
 }
 
@@ -35,13 +35,13 @@ int main(int argc, char** argv)
     // Generate Matrix
     const int N = 256;
     float *A, *B, *C, *subA, *subB, *subC, *recv;
-    cudaMallocManaged(&A, N * N * sizeof(float));
-    cudaMallocManaged(&B, N * N * sizeof(float));
-    cudaMallocManaged(&C, N * N * sizeof(float));
-    cudaMallocManaged(&subA, N * N / size * sizeof(float));
-    cudaMallocManaged(&subB, N * N / size * sizeof(float));
-    cudaMallocManaged(&subC, N * N / size * sizeof(float));
-    cudaMallocManaged(&recv, N * N / size * sizeof(float));
+    cudaMallocHost(&A, N * N * sizeof(float));
+    cudaMallocHost(&B, N * N * sizeof(float));
+    cudaMallocHost(&C, N * N * sizeof(float));
+    cudaMallocHost(&subA, N * N / size * sizeof(float));
+    cudaMallocHost(&subB, N * N / size * sizeof(float));
+    cudaMallocHost(&subC, N * N / size * sizeof(float));
+    cudaMallocHost(&recv, N * N / size * sizeof(float));
     for (int i = 0; i < N; i++)
     {
         for (int j = 0; j < N; j++)
@@ -65,7 +65,14 @@ int main(int argc, char** argv)
     int send_to = (rank - 1 + size) % size;
     
     // Initialize CUDA grid and block
+    cudaMalloc(&d_a, N * N / size * sizeof(float));
+    cudaMalloc(&d_b, N * N / size * sizeof(float));
+    cudaMalloc(&d_c, N * N / size * sizeof(float));
+    
+    cudaMemcpy(d_a, subA, N * N / size * sizeof(float));
+    cudaMemcpy(d_b, subB, N * N / size * sizeof(float));
     unsigned int grid_n = ((N / size) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
     dim3 dimGrid(grid_n, grid_n);
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
 
@@ -77,7 +84,8 @@ int main(int argc, char** argv)
         auto tic = chrono::steady_clock::now();
         
         offset = N / size * ((rank + irank) % size);
-        GPU_matrix_mult<<dimGrid, dimBlock>>(subA, subB, subC, N, offset);
+        GPU_matrix_mult<<<dimGrid, dimBlock >>>(d_a, d_b, d_c, N, size, offset);
+        cudaMemcpy(subC, d_c, N * N / size, cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize();
         // Record the time-stamp after sub calculation process end
         auto toc = chrono::steady_clock::now();
