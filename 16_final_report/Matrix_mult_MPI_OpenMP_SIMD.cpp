@@ -30,7 +30,7 @@ int main(int argc, char** argv)
     vector<float> subA(N * N / size);
     vector<float> subB(N * N / size);
     vector<float> subC(N * N / size, 0);
-    
+    vector<float> recv(N * N / size);
     for (int i = 0; i < N; i++)
     {
         for (int j = 0; j < N; j++)
@@ -108,8 +108,11 @@ int main(int argc, char** argv)
         comp_time += chrono::duration<double>(toc - tic).count();
         
         // Send & Receive Buffer
-        MPI_Send(&subB[0], N * N / size, MPI_FLOAT, send_to, 0, MPI_COMM_WORLD);
-        MPI_Recv(&subB[0], N * N / size, MPI_FLOAT, recv_from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Request request[2];
+        MPI_Isend(&subB[0], N * N / size, MPI_FLOAT, send_to, 0, MPI_COMM_WORLD, &request[0]);
+        MPI_Irecv(&recv[0], N * N / size, MPI_FLOAT, recv_from, 0, MPI_COMM_WORLD, &request[1]);
+        MPI_Waitall(2, request, MPI_STATUS_IGNORE);
+        for (int i = 0; i < N * N / size; i++) subB[i] = recv[i];
         
         // Record the time-stamp after whole process end
         tic = chrono::steady_clock::now();
